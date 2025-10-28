@@ -2,8 +2,6 @@ import express from "express";
 import cors from "cors";
 import pkg from "pg";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -198,18 +196,6 @@ app.get("/api/health", (req, res) => {
 });
 
 // ===============================
-// 🌐 Serve React Frontend (Fullstack)
-// ===============================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-app.use(express.static(path.join(__dirname, "../client/build")));
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../client/build/index.html"));
-});
-
-// ===============================
 // 🚀 Start Server
 // ===============================
 app.listen(PORT, () => {
@@ -217,6 +203,7 @@ app.listen(PORT, () => {
   console.log("🌐 Allowed Origins:", allowedOrigins);
   console.log(`🗄️  Database: ${process.env.DATABASE_URL ? "Connected" : "Not configured"}`);
 });
+
 
 
 

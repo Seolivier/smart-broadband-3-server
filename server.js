@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://smart-broadband-3.vercel.app", // Frontend on Vercel
+  "https://smart-broadband-3.vercel.app",
 ];
 
 app.use(
@@ -37,13 +37,13 @@ app.use(express.json());
 // 🗄️ PostgreSQL Connection (Supabase)
 // ===============================
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // Supabase connection string
-  ssl: { rejectUnauthorized: false }, // Required for Supabase
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }, // important for Supabase self-signed SSL
 });
 
 // Test DB connection
 pool.connect((err, client, release) => {
-  if (err) console.error("❌ Error acquiring client", err.stack);
+  if (err) console.error("❌ Error acquiring client:", err.message);
   else {
     console.log("✅ Connected to Supabase PostgreSQL database");
     release();
@@ -71,7 +71,7 @@ const createTable = async () => {
     `);
     console.log("✅ Clients table ready");
   } catch (err) {
-    console.error("❌ Error creating table:", err);
+    console.error("❌ Error creating table:", err.message);
   }
 };
 createTable();
@@ -203,9 +203,6 @@ app.listen(PORT, () => {
   console.log("🌐 Allowed Origins:", allowedOrigins);
   console.log(`🗄️  Database: ${process.env.DATABASE_URL ? "Supabase Connected" : "Not configured"}`);
 });
-
-
-
 
 
 

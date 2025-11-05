@@ -44,12 +44,14 @@ app.use(
 // 🗄️ Supabase Client
 // ===============================
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  // Fix self-signed certificate issue (important for Windows / Render)
   fetch: (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args)),
   autoRefreshToken: true,
   persistSession: false,
   detectSessionInUrl: false
 });
+
+// Confirm Supabase connection
+console.log('🗄️ Database: Supabase Connected');
 
 // ===============================
 // 🛠️ Helper to initialize tables if not exist

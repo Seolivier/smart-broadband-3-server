@@ -1,208 +1,166 @@
+// server.js
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
 
-import express from "express";
-import cors from "cors";
-import pkg from "pg";
-import dotenv from "dotenv";
-
-dotenv.config();
-
-const { Pool } = pkg;
-const app = express();
+// ===============================
+// 🛠️ Load Environment Variables
+// ===============================
 const PORT = process.env.PORT || 4000;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://pvbowddtvansmqvmivke.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
+
+if (!SUPABASE_KEY) {
+  console.error('❌ SUPABASE_KEY is not set. Add it to your .env file.');
+  process.exit(1);
+}
 
 // ===============================
 // 🟢 CORS Configuration
 // ===============================
 const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "https://smart-broadband-3.vercel.app",
+  'http://localhost:3000',
+  'http://localhost:5173',
+  FRONTEND_URL
 ];
 
+const app = express();
+app.use(express.json());
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow curl/postman
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       console.warn(`❌ CORS blocked for origin: ${origin}`);
-      return callback(new Error("Not allowed by CORS"));
+      return callback(new Error('Not allowed by CORS'));
     },
-    credentials: true,
+    credentials: true
   })
 );
 
-app.use(express.json());
-
 // ===============================
-// 🗄️ PostgreSQL Connection (Supabase)
+// 🗄️ Supabase Client
 // ===============================
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }, // important for Supabase self-signed SSL
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  // Fix self-signed certificate issue (important for Windows / Render)
+  fetch: (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args)),
+  autoRefreshToken: true,
+  persistSession: false,
+  detectSessionInUrl: false
 });
 
-// Test DB connection
-pool.connect((err, client, release) => {
-  if (err) console.error("❌ Error acquiring client:", err.message);
-  else {
-    console.log("✅ Connected to Supabase PostgreSQL database");
-    release();
-  }
-});
-
-// Ensure table exists
-const createTable = async () => {
+// ===============================
+// 🛠️ Helper to initialize tables if not exist
+// ===============================
+async function createClientsTable() {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS clients (
-        id SERIAL PRIMARY KEY,
-        full_name VARCHAR(255) NOT NULL,
-        email VARCHAR(255),
-        phone VARCHAR(50),
-        location VARCHAR(255),
-        service_type VARCHAR(100),
-        serial_number VARCHAR(100),
-        price DECIMAL(10,2),
-        supporter VARCHAR(255),
-        has_bonus BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log("✅ Clients table ready");
+    await supabase.from('clients').select('*').limit(1);
+    console.log('✅ Clients table ready');
   } catch (err) {
-    console.error("❌ Error creating table:", err.message);
+    console.error('❌ Error accessing Clients table:', err.message);
   }
-};
-createTable();
+}
 
 // ===============================
 // 🛠️ API ROUTES
 // ===============================
 
-// Get all clients with pagination
-app.get("/api/clients", async (req, res) => {
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    message: '✅ Smart Broadband Server is running!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Get all clients
+app.get('/api/clients', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 10;
-    const offset = (page - 1) * limit;
-
-    const result = await pool.query(
-      "SELECT * FROM clients ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-      [limit, offset]
-    );
-
-    const totalCount = await pool.query("SELECT COUNT(*) FROM clients");
-    const totalClients = parseInt(totalCount.rows[0].count);
-    const totalPages = Math.ceil(totalClients / limit);
-
-    res.json({
-      data: result.rows,
-      currentPage: page,
-      totalPages,
-      totalClients,
-    });
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ data });
   } catch (err) {
-    console.error("❌ Error fetching clients:", err.message);
-    res.status(500).json({ error: "Failed to fetch clients" });
+    console.error('❌ Error fetching clients:', err.message);
+    res.status(500).json({ error: 'Failed to fetch clients' });
   }
 });
 
 // Get single client
-app.get("/api/clients/:id", async (req, res) => {
+app.get('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query("SELECT * FROM clients WHERE id = $1", [id]);
-    if (result.rows.length === 0)
-      return res.status(404).json({ error: "Client not found" });
-
-    res.json(result.rows[0]);
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
-    console.error("❌ Error fetching client:", err.message);
-    res.status(500).json({ error: "Failed to fetch client" });
+    console.error('❌ Error fetching client:', err.message);
+    res.status(500).json({ error: 'Failed to fetch client' });
   }
 });
 
 // Create client
-app.post("/api/clients", async (req, res) => {
+app.post('/api/clients', async (req, res) => {
   try {
-    const { full_name, email, phone, location, service_type, serial_number, price, supporter, has_bonus } = req.body;
-
-    const result = await pool.query(
-      `INSERT INTO clients 
-      (full_name,email,phone,location,service_type,serial_number,price,supporter,has_bonus)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [full_name, email, phone, location, service_type, serial_number, price, supporter, has_bonus]
-    );
-
-    res.json({ message: "✅ Client added successfully", client: result.rows[0] });
+    const clientData = req.body;
+    const { data, error } = await supabase.from('clients').insert([clientData]);
+    if (error) throw error;
+    res.json({ message: '✅ Client added successfully', client: data[0] });
   } catch (err) {
-    console.error("❌ Error adding client:", err.message);
-    res.status(500).json({ error: "Failed to add client" });
+    console.error('❌ Error adding client:', err.message);
+    res.status(500).json({ error: 'Failed to add client' });
   }
 });
 
 // Update client
-app.put("/api/clients/:id", async (req, res) => {
+app.put('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { full_name, email, phone, location, service_type, serial_number, price, supporter, has_bonus } = req.body;
-
-    const result = await pool.query(
-      `UPDATE clients SET
-        full_name=$1,
-        email=$2,
-        phone=$3,
-        location=$4,
-        service_type=$5,
-        serial_number=$6,
-        price=$7,
-        supporter=$8,
-        has_bonus=$9,
-        updated_at=NOW()
-      WHERE id=$10 RETURNING *`,
-      [full_name, email, phone, location, service_type, serial_number, price, supporter, has_bonus, id]
-    );
-
-    if (result.rows.length === 0)
-      return res.status(404).json({ error: "Client not found" });
-
-    res.json({ message: "✅ Client updated successfully", client: result.rows[0] });
+    const clientData = req.body;
+    const { data, error } = await supabase
+      .from('clients')
+      .update(clientData)
+      .eq('id', id);
+    if (error) throw error;
+    res.json({ message: '✅ Client updated successfully', client: data[0] });
   } catch (err) {
-    console.error("❌ Error updating client:", err.message);
-    res.status(500).json({ error: "Failed to update client" });
+    console.error('❌ Error updating client:', err.message);
+    res.status(500).json({ error: 'Failed to update client' });
   }
 });
 
 // Delete client
-app.delete("/api/clients/:id", async (req, res) => {
+app.delete('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query("DELETE FROM clients WHERE id=$1 RETURNING *", [id]);
-
-    if (result.rows.length === 0)
-      return res.status(404).json({ error: "Client not found" });
-
-    res.json({ message: "✅ Client deleted successfully", client: result.rows[0] });
+    const { data, error } = await supabase.from('clients').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ message: '✅ Client deleted successfully', client: data[0] });
   } catch (err) {
-    console.error("❌ Error deleting client:", err.message);
-    res.status(500).json({ error: "Failed to delete client" });
+    console.error('❌ Error deleting client:', err.message);
+    res.status(500).json({ error: 'Failed to delete client' });
   }
-});
-
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ message: "✅ Smart Broadband Server is running!", timestamp: new Date().toISOString() });
 });
 
 // ===============================
 // 🚀 Start Server
 // ===============================
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log("🌐 Allowed Origins:", allowedOrigins);
-  console.log(`🗄️  Database: ${process.env.DATABASE_URL ? "Supabase Connected" : "Not configured"}`);
+  console.log('🌐 Allowed Origins:', allowedOrigins);
+
+  // Initialize tables
+  await createClientsTable();
 });
+
 
 
 

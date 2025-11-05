@@ -1,3 +1,4 @@
+
 import express from "express";
 import cors from "cors";
 import pkg from "pg";
@@ -15,8 +16,7 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://smart-broadband-3-7-frontend.onrender.com",
-  "https://smart-broadband-3-8-frontend.onrender.com",
+  "https://smart-broadband-3.vercel.app", // Frontend on Vercel
 ];
 
 app.use(
@@ -34,18 +34,18 @@ app.use(
 app.use(express.json());
 
 // ===============================
-// 🗄️ PostgreSQL Connection
+// 🗄️ PostgreSQL Connection (Supabase)
 // ===============================
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  connectionString: process.env.DATABASE_URL, // Supabase connection string
+  ssl: { rejectUnauthorized: false }, // Required for Supabase
 });
 
 // Test DB connection
 pool.connect((err, client, release) => {
   if (err) console.error("❌ Error acquiring client", err.stack);
   else {
-    console.log("✅ Connected to PostgreSQL database");
+    console.log("✅ Connected to Supabase PostgreSQL database");
     release();
   }
 });
@@ -201,11 +201,8 @@ app.get("/api/health", (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log("🌐 Allowed Origins:", allowedOrigins);
-  console.log(`🗄️  Database: ${process.env.DATABASE_URL ? "Connected" : "Not configured"}`);
+  console.log(`🗄️  Database: ${process.env.DATABASE_URL ? "Supabase Connected" : "Not configured"}`);
 });
-
-
-
 
 
 

@@ -66,6 +66,16 @@ async function createClientsTable() {
 }
 
 // ===============================
+// Root Route
+// ===============================
+app.get('/', (req, res) => {
+  res.json({
+    message: '🌐 Welcome to the Smart Broadband Server!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ===============================
 // 🛠️ API ROUTES
 // ===============================
 
@@ -162,7 +172,6 @@ app.listen(PORT, async () => {
   // Initialize tables
   await createClientsTable();
 });
-
 
 
 
